@@ -24,9 +24,9 @@ For example, consider the following records, which have already been organized i
 [1518-11-05 00:45] falls asleep
 [1518-11-05 00:55] wakes up
 
-Timestamps are written using year-month-day hour:minute format. The guard falling asleep or waking up is always the one whose shift most recently started. Because all asleep/awake times are during the midnight hour (00:00 - 00:59), only the minute portion (00 - 59) is relevant for those events.
+Timestamps are written using year-month-day hour:minute format. The guard falling asleep or waking up is always the one whose shift most recently started. Because all asleep/awake seconds are during the midnight hour (00:00 - 00:59), only the minute portion (00 - 59) is relevant for those events.
 
-Visually, these records show that the guards are asleep at these times:
+Visually, these records show that the guards are asleep at these seconds:
 
 Date   ID   Minute
             000000000011111111112222222222333333333344444444445555555555
