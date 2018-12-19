@@ -3,13 +3,12 @@ import java.io.File
 
 val springRow = 0
 val springColumn = 500
-val spring = GroundSquareMeter(springRow, springColumn, GroundType.Spring)
-val ground = mutableSetOf(spring)
+val spring = Coordinate(springRow, springColumn)
+val ground = mutableMapOf<Coordinate, GroundType>(Pair(Coordinate(springRow, springColumn), GroundType.Spring))
 
 var i = 1
-//File("input").forEachLine {
-File("testInput").forEachLine {
-
+File("input").forEachLine {
+//File("testInput").forEachLine {
     val regex = """^([xy])=(\d+),\s[xy]=(\d+)\.\.(\d+)$""".toRegex()
 
     val matchResult = regex.find(it)
@@ -21,91 +20,122 @@ File("testInput").forEachLine {
     val secondDimensionEnd = sSecondDimensionEnd.toInt()
     for (secondDimension in secondDimensionStart..secondDimensionEnd) {
         when (xOry) {
-            "x" -> ground.add(GroundSquareMeter(secondDimension, firstDimension, GroundType.Clay))
-            "y" -> ground.add(GroundSquareMeter(firstDimension, secondDimension, GroundType.Clay))
+            "x" -> ground[Coordinate(secondDimension, firstDimension)] = GroundType.Clay
+
+            "y" -> ground[Coordinate(firstDimension, secondDimension)] = GroundType.Clay
         }
     }
     i++
 }
 
-val bottom = ground.maxBy { it.row }!!.row
-val left = ground.minBy { it.column }!!.column
-val right = ground.maxBy { it.column }!!.column
+val bottom = ground.keys.maxBy { it.row }!!.row
+val left = ground.keys.minBy { it.column }!!.column
+val right = ground.keys.maxBy { it.column }!!.column
 
+//printBoard(ground)
+
+downDfs(Coordinate(springRow + 1, springColumn))
 printBoard(ground)
+println(ground.values.count { it == GroundType.FlowWater || it == GroundType.RestWater })
 
-println(dfs(GroundSquareMeter(springRow + 1, springColumn, GroundType.FlowWater)))
-printBoard(ground)
-
-fun dfs(node: GroundSquareMeter): Int {
-    ground.add(node)
-    printBoard(ground)
-    if(isBottom(node.row)){
+fun downDfs(node: Coordinate): Int {
+    ground[node] = GroundType.FlowWater
+//    printBoard(ground)
+    if (isBottomFloor(node.row)) {
         return 1
     }
-    val down = node.down(GroundType.FlowWater)
-    var waterDown = 0
+    val down = node.down()
+    var streamValue = 1
     if (isValid(down)) {
-        waterDown = dfs(down)
+        streamValue += downDfs(down)
+        if (ground[down] != GroundType.RestWater) {
+            return streamValue
+        }
     }
-    val left = node.left(GroundType.FlowWater)
-    var waterAtLeft = 0
-    if (isValidLateral(left)) {
-        waterAtLeft = dfs(left)
+    //find leftest (wall or fall)
+    val left = node.left()
+    val leftFlow = leftDfs(left)
+    //find rightest (wall or fall)
+    val right = node.right()
+    val rightFlow = rightDfs(right)
+    //looks if the water is resting
+    val waterType = if (leftFlow.fall || rightFlow.fall) GroundType.FlowWater else GroundType.RestWater
+    //fill the water
+    for (n in leftFlow.left.column..rightFlow.right.column) {
+        ground[Coordinate(leftFlow.left.row, n)] = waterType
     }
-    val right = node.right(GroundType.FlowWater)
-    var waterAtRight = 0
-    if (isValidLateral(right)) {
-        waterAtRight = dfs(right)
+
+    if(leftFlow.fall){
+        streamValue+= downDfs(leftFlow.left)
     }
-    return 1 + waterDown + waterAtLeft + waterAtRight
+    if(rightFlow.fall){
+        streamValue+= downDfs(rightFlow.right)
+    }
+
+    return streamValue + (rightFlow.right.column - leftFlow.left.column)
 }
 
-fun isValid(node: GroundSquareMeter): Boolean = !ground.contains(node)
-fun isValidLateral(node: GroundSquareMeter): Boolean = !ground.contains(node)
-
-data class GroundSquareMeter(val row: Int, val column: Int) {
-
-    var type: GroundType = GroundType.Sand
-
-    constructor(row: Int, column: Int, type: GroundType) : this(row, column) {
-        this.type = type
+fun leftDfs(node: Coordinate): Flow {
+    val right = node.right()
+    if (isWall(node)) {
+        return Flow(right, right, false)
+    } else if (isValid(node.down())) {
+        return Flow(node, node, true)
+    } else {
+        val leftFlow = leftDfs(node.left())
+        return leftFlow.copy(right = node)
     }
+}
 
-    override fun toString(): String {
-        return type.toString()
+fun rightDfs(node: Coordinate): Flow {
+    if (isWall(node)) {
+        return Flow(node.left(), node.left(), false)
+    } else if (isValid(node.down())) {
+        return Flow(node, node, true)
+    } else {
+        val rightFlow = rightDfs(node.right())
+        return rightFlow.copy(left = node)
     }
+}
 
-    fun down(type: GroundType = GroundType.Sand): GroundSquareMeter = GroundSquareMeter(row + 1, column, type)
-    fun left(type: GroundType = GroundType.Sand): GroundSquareMeter = GroundSquareMeter(row, column - 1, type)
-    fun right(type: GroundType = GroundType.Sand): GroundSquareMeter = GroundSquareMeter(row, column + 1, type)
+fun isValid(node: Coordinate): Boolean {
+    val groundType = ground[node]
+    return groundType == null || !groundType.isFloor()
+}
+
+data class Coordinate(val row: Int, val column: Int) {
+
+    fun down(): Coordinate = Coordinate(row + 1, column)
+    fun left(): Coordinate = Coordinate(row, column - 1)
+    fun right(): Coordinate = Coordinate(row, column + 1)
 
 }
 
-enum class GroundType(private val code: String) {
-    Sand("."),
-    Clay("#"),
-    Spring("+"),
-    FlowWater("|"),
-
-    RestWater("~");
+enum class GroundType(private val code: String, private val floor: Boolean) {
+    Sand(".", false),
+    Clay("#", true),
+    Spring("+", false),
+    FlowWater("|", false),
+    RestWater("~", true);
 
 
     override fun toString(): String {
         return this.code
     }
 
+    fun isFloor(): Boolean = this.floor
+
 }
 
-fun printBoard(board: Set<GroundSquareMeter>) {
+fun printBoard(board: Map<Coordinate, GroundType>) {
 
-    val bottom = board.maxBy { it.row }!!.row
-    val left = board.minBy { it.column }!!.column
-    val right = board.maxBy { it.column }!!.column
+    val bottom = board.keys.maxBy { it.row }!!.row
+    val left = board.keys.minBy { it.column }!!.column
+    val right = board.keys.maxBy { it.column }!!.column
 
     for (row in 0..bottom) {
         for (column in left..right) {
-            val firstOrNull = board.firstOrNull { it == SeventeenOne.GroundSquareMeter(row, column) }
+            val firstOrNull = board[Coordinate(row, column)]
             if (firstOrNull == null) {
                 print(".")
             } else {
@@ -117,4 +147,8 @@ fun printBoard(board: Set<GroundSquareMeter>) {
     println()
 }
 
-fun SeventeenOne.isBottom(row: Int) = row == bottom
+fun SeventeenOne.isBottomFloor(row: Int) = row == bottom
+
+data class Flow(val left: Coordinate, val right: Coordinate, val fall: Boolean)
+
+fun isWall(left: Coordinate): Boolean = ground[left] != null && ground[left]!!.isFloor()
